@@ -1,0 +1,123 @@
+name: Release
+
+on:
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    check-version:
+        name: Check Version
+        runs-on: ubuntu-latest
+        timeout-minutes: 2
+        outputs:
+            version: ${{ steps.get_version.outputs.version }}
+            is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Get version from Cargo.toml
+              id: get_version
+              run: |
+                  VERSION=$(grep '^version' Cargo.toml | head -1 | awk -F '"' '{print $2}')
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+                  if [[ "$VERSION" == 0.* ]]; then
+                    echo "is_prerelease=true" >> $GITHUB_OUTPUT
+                    echo "Found version: $VERSION (Prerelease)"
+                  else
+                    echo "is_prerelease=false" >> $GITHUB_OUTPUT
+                    echo "Found version: $VERSION (Release)"
+                  fi
+
+            - name: Cancel if release exists
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  if gh release view "v${{ steps.get_version.outputs.version }}" > /dev/null 2>&1; then
+                    echo "::error::Release v${{ steps.get_version.outputs.version }} already exists."
+                    exit 1
+                  fi
+
+    build:
+        name: Build for ${{ matrix.target }}
+        needs: check-version
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 15
+        strategy:
+            # If one platform fails, dont cancel the other
+            fail-fast: false
+            matrix:
+                include:
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                      bin: orion-rpc.exe
+                      archive: orion-rpc-x86_64-pc-windows-msvc.zip
+                      pack_cmd: Compress-Archive -Path target/x86_64-pc-windows-msvc/release/orion-rpc.exe -DestinationPath orion-rpc-x86_64-pc-windows-msvc.zip
+
+                    - os: ubuntu-latest
+                      target: x86_64-unknown-linux-gnu
+                      bin: orion-rpc
+                      archive: orion-rpc-x86_64-unknown-linux-gnu.tar.gz
+                      pack_cmd: tar -czvf orion-rpc-x86_64-unknown-linux-gnu.tar.gz -C target/x86_64-unknown-linux-gnu/release orion-rpc
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Install Linux Dependencies
+              if: matrix.os == 'ubuntu-latest'
+              # gpui and tray-icon require these packages
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y pkg-config libx11-dev libxkbcommon-x11-dev \
+                    libwayland-dev libx11-xcb-dev libglib2.0-dev libgtk-3-dev \
+                    libayatana-appindicator3-dev
+
+            - name: Install Rust
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: ${{ matrix.target }}
+
+            - name: Setup Rust Cache
+              uses: Swatinem/rust-cache@v2
+              with:
+                  key: ${{ matrix.target }}
+
+            - name: Build Release Target
+              run: cargo build --release --target ${{ matrix.target }}
+
+            - name: Package Release
+              run: ${{ matrix.pack_cmd }}
+
+            - name: Upload Build Artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ matrix.target }}
+                  path: ${{ matrix.archive }}
+                  retention-days: 1
+
+    publish-release:
+        name: Publish Release
+        needs: [check-version, build]
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - name: Download all artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: artifacts
+                  merge-multiple: true
+
+            - name: Create Release
+              uses: softprops/action-gh-release@v2
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tag_name: v${{ needs.check-version.outputs.version }}
+                  name: Release v${{ needs.check-version.outputs.version }}
+                  files: artifacts/*
+                  draft: false
+                  prerelease: ${{ needs.check-version.outputs.is_prerelease == 'true' }}
