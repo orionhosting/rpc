@@ -1,0 +1,33 @@
+[package]
+name = "orion-rpc"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+auto-launch = "0.5"
+discord-rich-presence = "1.1.0"
+gpui = "0.2.2"
+gpui-component = "0.5.1"
+gpui-component-assets = "0.5.1"
+interprocess = "2"
+self_update = "0.44.0"
+semver = "1.0.28"
+serde = "1.0.228"
+serde_json = "1.0.150"
+tao = "0.35.3"
+thiserror = "2.0.18"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+tray-icon = "0.24.0"
+
+[build-dependencies]
+image = "0.25.10"
+winresource = "0.1.31"
+
+[profile.release]
+opt-level = "z"
+panic = "abort"
+codegen-units = 1
+lto = true
+strip = "symbols"
+debug = false

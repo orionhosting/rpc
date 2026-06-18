@@ -1,0 +1,7 @@
+/target
+
+# Compiled tray icon
+icon.bin
+
+# Compiled binary icon
+icon.ico
