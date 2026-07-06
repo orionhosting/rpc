@@ -2,9 +2,9 @@ use std::time::Duration;
 
 pub const APP_NAME: &str = "Orion RPC";
 
-pub const REPO_URL: &str = "https://github.com/voctal/orion-rpc";
-pub const REPO_OWNER: &str = "voctal";
-pub const REPO_NAME: &str = "orion-rpc";
+pub const REPO_URL: &str = "https://github.com/orionhosting/rpc";
+pub const REPO_OWNER: &str = "orionhosting";
+pub const REPO_NAME: &str = "rpc";
 
 pub const CURRENT_APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
